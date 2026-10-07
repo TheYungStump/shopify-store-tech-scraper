@@ -1,0 +1,70 @@
+{
+  "actorSpecification": 1,
+  "fields": {
+    "url": {
+      "type": "string",
+      "title": "Store URL",
+      "description": "The URL of the scraped Shopify store"
+    },
+    "isShopify": {
+      "type": "boolean",
+      "title": "Is Shopify",
+      "description": "Whether the target is confirmed as a Shopify storefront"
+    },
+    "themeName": {
+      "type": "string",
+      "title": "Theme Name",
+      "description": "Detected theme name"
+    },
+    "detectedApps": {
+      "type": "array",
+      "title": "Detected Apps",
+      "description": "List of installed third-party apps and plugins"
+    },
+    "detectedAppCount": {
+      "type": "integer",
+      "title": "App Count",
+      "description": "Total number of third-party apps identified"
+    },
+    "contactEmails": {
+      "type": "array",
+      "title": "Contact Emails",
+      "description": "Public contact email addresses extracted from the site"
+    },
+    "socialMedia": {
+      "type": "object",
+      "title": "Social Profiles",
+      "description": "Links to detected social channels"
+    },
+    "scrapedAt": {
+      "type": "string",
+      "title": "Scraped Timestamp",
+      "description": "ISO timestamp when the store was audited"
+    }
+  },
+  "views": {
+    "overview": {
+      "title": "Overview",
+      "transformation": {
+        "fields": [
+          "url",
+          "isShopify",
+          "themeName",
+          "detectedAppCount",
+          "detectedApps",
+          "contactEmails"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "columns": [
+          { "field": "url", "label": "Store URL" },
+          { "field": "isShopify", "label": "Shopify?" },
+          { "field": "themeName", "label": "Theme" },
+          { "field": "detectedAppCount", "label": "Apps Found" },
+          { "field": "contactEmails", "label": "Emails" }
+        ]
+      }
+    }
+  }
+}
