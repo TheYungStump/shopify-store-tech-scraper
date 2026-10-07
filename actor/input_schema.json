@@ -1,0 +1,26 @@
+{
+  "title": "Shopify Store Intelligence Input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "startUrls": {
+      "title": "Store URLs",
+      "type": "array",
+      "description": "List of Shopify store domain URLs to inspect.",
+      "editor": "globs",
+      "prefill": [
+        "https://gymshark.com",
+        "https://allbirds.com"
+      ]
+    },
+    "maxConcurrency": {
+      "title": "Max Concurrency",
+      "type": "integer",
+      "description": "Number of pages to process concurrently.",
+      "default": 5,
+      "minimum": 1,
+      "maximum": 20
+    }
+  },
+  "required": ["startUrls"]
+}

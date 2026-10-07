@@ -1,0 +1,14 @@
+{
+  "name": "shopify-store-intelligence",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Extracts installed apps, theme details, marketing pixels, and contact info from public Shopify stores.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "apify": "^3.2.0",
+    "crawlee": "^3.11.0"
+  }
+}

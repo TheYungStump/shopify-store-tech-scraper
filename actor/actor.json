@@ -1,0 +1,9 @@
+{
+  "actorSpecification": 1,
+  "name": "shopify-store-intelligence",
+  "title": "Shopify Store Tech Stack & Lead Extractor",
+  "description": "Scrapes public Shopify storefronts to detect installed apps, themes, tracking pixels, and business contact info.",
+  "version": "1.0",
+  "dockerfile": "./Dockerfile",
+  "input": "./input_schema.json"
+}
