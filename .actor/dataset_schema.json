@@ -1,0 +1,62 @@
+{
+  "actorSpecification": 1,
+  "fields": {
+    "url": {
+      "type": "string",
+      "title": "Store URL"
+    },
+    "isShopify": {
+      "type": "boolean",
+      "title": "Is Shopify"
+    },
+    "themeName": {
+      "type": "string",
+      "title": "Theme Name"
+    },
+    "detectedApps": {
+      "type": "array",
+      "title": "Detected Apps"
+    },
+    "detectedAppCount": {
+      "type": "integer",
+      "title": "App Count"
+    },
+    "contactEmails": {
+      "type": "array",
+      "title": "Contact Emails"
+    },
+    "socialMedia": {
+      "type": "object",
+      "title": "Social Profiles"
+    },
+    "scrapedAt": {
+      "type": "string",
+      "title": "Scraped Timestamp"
+    }
+  },
+  "views": {
+    "overview": {
+      "title": "Store Tech Overview",
+      "transformation": {
+        "fields": [
+          "url",
+          "isShopify",
+          "themeName",
+          "detectedAppCount",
+          "detectedApps",
+          "contactEmails"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "columns": [
+          { "field": "url", "label": "Store URL" },
+          { "field": "isShopify", "label": "Shopify?" },
+          { "field": "themeName", "label": "Theme" },
+          { "field": "detectedAppCount", "label": "Apps Installed" },
+          { "field": "contactEmails", "label": "Email Leads" }
+        ]
+      }
+    }
+  }
+}
