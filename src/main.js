@@ -5,14 +5,14 @@ await Actor.init();
 
 const input = await Actor.getInput() || {};
 const startUrls = input.startUrls || [];
-const maxConcurrency = input.maxConcurrency || 5;
+// Hard-cap concurrency to 2 to prevent Cloudflare 429/403 IP bans
+const maxConcurrency = input.maxConcurrency ? Math.min(input.maxConcurrency, 2) : 2;
 
 if (!startUrls.length) {
     log.error('No start URLs provided. Exiting.');
     await Actor.exit({ exitCode: 1 });
 }
 
-// High-demand e-commerce tech stack signatures
 const APP_SIGNATURES = {
     'Klaviyo': ['klaviyo', 'static.klaviyo.com'],
     'ReCharge Payments': ['rechargepayments.com', 'rechargeassets.com'],
@@ -36,37 +36,36 @@ const APP_SIGNATURES = {
     'Omnisend': ['omnisend.com']
 };
 
-// Domain and filename blacklists for email extraction
-const BLOCKED_EMAIL_DOMAINS = [
-    'sentry.io', 'example.com', 'domain.com', 'storefront.com', 
-    'shopify.com', 'myshopify.com', 'wixpress.com'
-];
+const BLOCKED_EMAIL_DOMAINS = ['sentry.io', 'example.com', 'domain.com', 'storefront.com', 'shopify.com', 'myshopify.com', 'wixpress.com'];
 const INVALID_EMAIL_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.css', '.js', '.map'];
 
 const crawler = new CheerioCrawler({
     maxConcurrency,
-    requestHandlerTimeoutSecs: 30,
-    async requestHandler({ request, $, body }) {
+    requestHandlerTimeoutSecs: 45,
+    maxRequestRetries: 1, // Don't burn compute retrying hard blocks
+    additionalMimeTypes: ['application/json'],
+    async requestHandler({ request, $, body, response }) {
         const url = request.url;
-        log.info(`Inspecting: ${url}`);
+        
+        // Anti-Bot Protection Check
+        if (response.statusCode === 403 || response.statusCode === 429) {
+            log.warning(`Blocked by Cloudflare/WAF on ${url}. Skipping to protect dataset quality.`);
+            return; // Exit silently, do NOT charge the user
+        }
 
         const html = body.toLowerCase();
         
-        // 1. Verify Shopify storefront
+        // Strict Shopify Verification
         const isShopify = html.includes('cdn.shopify.com') || 
                           html.includes('shopify.theme') || 
                           $('link[href*="cdn.shopify.com"]').length > 0;
 
+        // If it isn't Shopify (or is a CAPTCHA page), drop the record entirely
         if (!isShopify) {
-            await Actor.pushData({
-                url,
-                isShopify: false,
-                scrapedAt: new Date().toISOString()
-            });
-            return;
+            log.info(`Skipping non-Shopify domain: ${url}`);
+            return; 
         }
 
-        // 2. Extract and clean theme metadata
         let themeName = 'Unknown';
         const themeScript = $('script:contains("Shopify.theme")').text();
         const themeMatch = themeScript.match(/name["']?:\s*["']([^"']+)["']/i);
@@ -74,7 +73,6 @@ const crawler = new CheerioCrawler({
             themeName = themeMatch[1].replace(/\\\//g, '/').trim();
         }
 
-        // 3. Detect installed apps & scripts
         const detectedApps = [];
         const scriptSrcs = $('script[src]').map((_, el) =>$(el).attr('src')).get().join(' ').toLowerCase();
 
@@ -85,24 +83,19 @@ const crawler = new CheerioCrawler({
             }
         }
 
-        // 4. Extract verified public contact emails
         const emails = new Set();
         const rawMatches = body.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-        
         for (const email of rawMatches) {
             const lowerEmail = email.toLowerCase().trim();
             const domainPart = lowerEmail.split('@')[1] || '';
 
-            const isBlockedDomain = BLOCKED_EMAIL_DOMAINS.some(b => domainPart.endsWith(b));
-            const hasInvalidExt = INVALID_EMAIL_EXTENSIONS.some(ext => domainPart.endsWith(ext) || lowerEmail.endsWith(ext));
-            const isPlaceholder = lowerEmail.startsWith('youremail') || lowerEmail.startsWith('chunk@') || lowerEmail.startsWith('defaultvendors@');
-
-            if (!isBlockedDomain && !hasInvalidExt && !isPlaceholder) {
+            if (!BLOCKED_EMAIL_DOMAINS.some(b => domainPart.endsWith(b)) && 
+                !INVALID_EMAIL_EXTENSIONS.some(ext => domainPart.endsWith(ext) || lowerEmail.endsWith(ext)) && 
+                !lowerEmail.startsWith('youremail') && !lowerEmail.startsWith('chunk@') && !lowerEmail.startsWith('defaultvendors@')) {
                 emails.add(lowerEmail);
             }
         }
 
-        // 5. Extract social channels with strict host checks
         const cleanSocial = (selector, regex) => {
             const el = $(selector).filter((_, a) => regex.test($(a).attr('href') || '')).first();
             return el.attr('href') || null;
@@ -115,7 +108,7 @@ const crawler = new CheerioCrawler({
             twitter: cleanSocial('a[href]', /^https?:\/\/(www\.)?(twitter\.com|x\.com)\/[a-zA-Z0-9_]+/i)
         };
 
-        // 6. Push clean payload
+        // Push clean payload
         await Actor.pushData({
             url,
             isShopify: true,
@@ -126,9 +119,11 @@ const crawler = new CheerioCrawler({
             socialMedia: socials,
             scrapedAt: new Date().toISOString()
         });
+        
+        log.info(`✅ Successfully enriched: ${url}`);
     },
     failedRequestHandler({ request }) {
-        log.error(`Request ${request.url} failed.`);
+        log.warning(`Request ${request.url} failed. Skipped.`);
     }
 });
 
