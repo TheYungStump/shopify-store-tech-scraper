@@ -12,7 +12,7 @@ if (!startUrls.length) {
     await Actor.exit({ exitCode: 1 });
 }
 
-// Signatures of popular Shopify apps and trackers to detect
+// High-demand e-commerce tech stack signatures
 const APP_SIGNATURES = {
     'Klaviyo': ['klaviyo', 'static.klaviyo.com'],
     'ReCharge Payments': ['rechargepayments.com', 'rechargeassets.com'],
@@ -23,12 +23,25 @@ const APP_SIGNATURES = {
     'Smile.io': ['smile.io', 'sweettooth'],
     'Postscript': ['postscript.io'],
     'Attentive': ['attentivemobile.com'],
+    'Triple Whale': ['triplewhale-pixel', 'triplewhale.com'],
+    'Elevar': ['getelevar.com'],
+    'Okendo': ['okendo.io', 'okendo-reviews'],
+    'Privy': ['privy.com'],
+    'Loop Returns': ['loopreturns.com'],
+    'PageFly': ['pagefly.io'],
     'Meta Pixel': ['connect.facebook.net/en_US/fbevents.js'],
     'TikTok Pixel': ['analytics.tiktok.com/i18n/pixel'],
     'Google Analytics / Tag Manager': ['googletagmanager.com', 'google-analytics.com'],
     'Hotjar': ['static.hotjar.com'],
     'Omnisend': ['omnisend.com']
 };
+
+// Domain and filename blacklists for email extraction
+const BLOCKED_EMAIL_DOMAINS = [
+    'sentry.io', 'example.com', 'domain.com', 'storefront.com', 
+    'shopify.com', 'myshopify.com', 'wixpress.com'
+];
+const INVALID_EMAIL_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.css', '.js', '.map'];
 
 const crawler = new CheerioCrawler({
     maxConcurrency,
@@ -39,7 +52,7 @@ const crawler = new CheerioCrawler({
 
         const html = body.toLowerCase();
         
-        // 1. Detect if it is actually a Shopify store
+        // 1. Verify Shopify storefront
         const isShopify = html.includes('cdn.shopify.com') || 
                           html.includes('shopify.theme') || 
                           $('link[href*="cdn.shopify.com"]').length > 0;
@@ -53,12 +66,12 @@ const crawler = new CheerioCrawler({
             return;
         }
 
-        // 2. Extract theme metadata
+        // 2. Extract and clean theme metadata
         let themeName = 'Unknown';
         const themeScript = $('script:contains("Shopify.theme")').text();
         const themeMatch = themeScript.match(/name["']?:\s*["']([^"']+)["']/i);
         if (themeMatch && themeMatch[1]) {
-            themeName = themeMatch[1];
+            themeName = themeMatch[1].replace(/\\\//g, '/').trim();
         }
 
         // 3. Detect installed apps & scripts
@@ -72,23 +85,37 @@ const crawler = new CheerioCrawler({
             }
         }
 
-        // 4. Extract public contact & social links
+        // 4. Extract verified public contact emails
         const emails = new Set();
-        const emailMatches = body.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-        for (const email of emailMatches) {
-            if (!email.endsWith('.png') && !email.endsWith('.jpg') && !email.endsWith('.webp')) {
-                emails.add(email);
+        const rawMatches = body.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+        
+        for (const email of rawMatches) {
+            const lowerEmail = email.toLowerCase().trim();
+            const domainPart = lowerEmail.split('@')[1] || '';
+
+            const isBlockedDomain = BLOCKED_EMAIL_DOMAINS.some(b => domainPart.endsWith(b));
+            const hasInvalidExt = INVALID_EMAIL_EXTENSIONS.some(ext => domainPart.endsWith(ext) || lowerEmail.endsWith(ext));
+            const isPlaceholder = lowerEmail.startsWith('youremail') || lowerEmail.startsWith('chunk@') || lowerEmail.startsWith('defaultvendors@');
+
+            if (!isBlockedDomain && !hasInvalidExt && !isPlaceholder) {
+                emails.add(lowerEmail);
             }
         }
 
-        const socials = {
-            instagram: $('a[href*="instagram.com"]').first().attr('href') || null,
-            facebook: $('a[href*="facebook.com"]').first().attr('href') || null,
-            tiktok: $('a[href*="tiktok.com"]').first().attr('href') || null,
-            twitter: $('a[href*="twitter.com"], a[href*="x.com"]').first().attr('href') || null
+        // 5. Extract social channels with strict host checks
+        const cleanSocial = (selector, regex) => {
+            const el = $(selector).filter((_, a) => regex.test($(a).attr('href') || '')).first();
+            return el.attr('href') || null;
         };
 
-        // 5. Store record
+        const socials = {
+            instagram: cleanSocial('a[href*="instagram.com"]', /^https?:\/\/(www\.)?instagram\.com\/[a-zA-Z0-9_.]+/i),
+            facebook: cleanSocial('a[href*="facebook.com"]', /^https?:\/\/(www\.)?facebook\.com\/(?!sharer)/i),
+            tiktok: cleanSocial('a[href*="tiktok.com"]', /^https?:\/\/(www\.)?tiktok\.com\/@[a-zA-Z0-9_.]+/i),
+            twitter: cleanSocial('a[href]', /^https?:\/\/(www\.)?(twitter\.com|x\.com)\/[a-zA-Z0-9_]+/i)
+        };
+
+        // 6. Push clean payload
         await Actor.pushData({
             url,
             isShopify: true,
@@ -101,7 +128,7 @@ const crawler = new CheerioCrawler({
         });
     },
     failedRequestHandler({ request }) {
-        log.error(`Request ${request.url} failed completely.`);
+        log.error(`Request ${request.url} failed.`);
     }
 });
 
